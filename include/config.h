@@ -6,11 +6,14 @@
 #define RTC_DAT_PIN 4
 #define RTC_CLK_PIN 5
 
-// ===== Датчик температуры и влажности DHT11 =====
-// Пин данных DHT11. Пин 8 свободен (2,3=LED; 4,5,9=RTC; 6=BUZZER; 7,10-12=KEYS).
-#define DHT_PIN  8
-// Тип датчика: DHT11 для реального железа, DHT22 для симулятора Wokwi.
+// ===== Датчик температуры и влажности =====
+// Пин данных (DHT_PIN 8 свободен: 2,3=LED; 4,5,9=RTC; 6=BUZZER; 7,10-12=KEYS).
+#define DHT_PIN 8
+// Тип датчика: DHT11 — реальное железо; DHT22 — Wokwi-симулятор.
+// Для окружения [env:wokwi] build_flags переопределяет это значение на DHT22.
+#ifndef DHT_TYPE
 #define DHT_TYPE DHT11
+#endif
 
 // ===== Звуковой сигнал =====
 #define BUZZER_PIN 6
