@@ -3,7 +3,7 @@
 #include <DHT.h>
 
 // ===== DHT11 =====
-static DHT dht(DHT_PIN, DHT11);
+static DHT dht(DHT_PIN, DHT_TYPE);
 
 void sensors_env_init() {
     dht.begin();
