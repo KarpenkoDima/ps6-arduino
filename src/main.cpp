@@ -62,6 +62,7 @@ void setup() {
     digitalWrite(BUZZER_PIN, LOW);
 
     leds_init();
+    sensors_env_init();
     display_init();
     chrono_init();
     alarm_load();
@@ -80,10 +81,12 @@ void loop() {
     leds_tick();
 
     switch (current_mode) {
-        case MODE_CLOCK:     current_mode = mode_clock();     break;
-        case MODE_RING:      current_mode = mode_ring();      break;
-        case MODE_TIMER:     current_mode = mode_timer();     break;
-        case MODE_STOPWATCH: current_mode = mode_stopwatch(); break;
-        case MODE_RESET:     current_mode = mode_reset();     break;
+        case MODE_CLOCK:       current_mode = mode_clock();       break;
+        case MODE_RING:        current_mode = mode_ring();        break;
+        case MODE_TIMER:       current_mode = mode_timer();       break;
+        case MODE_STOPWATCH:   current_mode = mode_stopwatch();   break;
+        case MODE_RESET:       current_mode = mode_reset();       break;
+        case MODE_SET_TIME:    current_mode = mode_set_time();    break;
+        case MODE_ALARM_SETUP: current_mode = mode_alarm_setup(); break;
     }
 }

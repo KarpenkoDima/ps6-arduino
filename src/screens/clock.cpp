@@ -5,113 +5,86 @@
 #include "lcd_wrapper.h"
 #include "rtc_wrapper.h"
 #include "sensors.h"
-#include "helpers.h"
 #include <Arduino.h>
+#include <math.h>
 
 /**
- * Подэкран настройки будильника.
- * Активное поле подсвечивается треугольными скобками, чтобы было видно,
- * что именно сейчас редактируется.
+ * Главный режим — отображение часов, даты, температуры и влажности.
  *
- * KEY1 — увеличить выбранное поле (час, минуту или ON↔OFF).
- * KEY2 — уменьшить.
- * KEY3 — следующее поле (час → минута → ON/OFF → опять час).
- * KEY4 — сохранить и выйти.
- */
-static void run_alarm_setup() {
-    byte field = 0;     // 0 — часы, 1 — минуты, 2 — флаг включения.
-    char line[17];
-
-    while (true) {
-        display_clear();
-
-        if (field == 0) {
-            sprintf(line, "Wake <%02d>:%02d %s",
-                    wake_alarm.hour, wake_alarm.minute,
-                    wake_alarm.enabled ? "ON " : "OFF");
-        } else if (field == 1) {
-            sprintf(line, "Wake %02d:<%02d> %s",
-                    wake_alarm.hour, wake_alarm.minute,
-                    wake_alarm.enabled ? "ON " : "OFF");
-        } else {
-            sprintf(line, "Wake %02d:%02d <%s>",
-                    wake_alarm.hour, wake_alarm.minute,
-                    wake_alarm.enabled ? "ON " : "OFF");
-        }
-        display_text(0, 0, line);
-
-        delay(180);
-        scan_keys();
-        byte k = pressed_keys;
-        pressed_keys = 0;
-
-        if (k & KEY_1_MASK) {
-            if (field == 0) wake_alarm.hour    = step_up(wake_alarm.hour, 24);
-            if (field == 1) wake_alarm.minute  = step_up(wake_alarm.minute, 60);
-            if (field == 2) wake_alarm.enabled = !wake_alarm.enabled;
-        }
-        if (k & KEY_2_MASK) {
-            if (field == 0) wake_alarm.hour    = step_down(wake_alarm.hour, 24);
-            if (field == 1) wake_alarm.minute  = step_down(wake_alarm.minute, 60);
-            if (field == 2) wake_alarm.enabled = !wake_alarm.enabled;
-        }
-        if (k & KEY_3_MASK) {
-            field = (field + 1) % 3;
-        }
-        if (k & KEY_4_MASK) {
-            alarm_save();
-            return;
-        }
-    }
-}
-
-/**
- * Главный режим — отображение часов и даты.
+ * Строка 0: ЧЧ:ММ:СС  TXXXc
+ * Строка 1: ДД.ММ.ГГГГ  HXX%
  *
- * KEY1 — открыть секундомер.
- * KEY2 — открыть таймер.
- * KEY3 — открыть настройку будильника.
- * KEY4 — переход в меню сброса (factory reset).
+ * KEY1 — установить текущее время/дату.
+ * KEY2 — секундомер.
+ * KEY3 — настройка будильника.
+ * KEY4 — заводской сброс.
  *
- * Лампочка LED_ALARM горит всегда, когда будильник активирован,
- * что соответствует требованию задания: пользователь видит, что
- * будильник включён, даже не глядя на экран.
+ * LED_ALARM горит, пока будильник включён.
  */
 AppMode mode_clock() {
-    DateTime t = read_clock();
-    char line[17];
+    static unsigned long last_display_ms  = 0;
+    static unsigned long last_sensor_ms   = 0;
+    static float         last_temp        = NAN;
+    static float         last_hum         = NAN;
+    // Защита от повторного срабатывания в той же минуте.
+    static bool          alarm_fired_this_minute = false;
 
-    display_clear();
-    sprintf(line, "%02d:%02d:%02d", t.hour, t.minute, t.second);
-    display_text(0, 4, line);
-    sprintf(line, "%02d.%02d.%04d", t.day, t.month, t.year);
-    display_text(1, 3, line);
+    unsigned long now = millis();
 
-    led_set(LED_ALARM, wake_alarm.enabled);
-
-    // Срабатывание будильника происходит ровно на нулевой секунде
-    // подходящей минуты — иначе режим звонка вызвался бы много раз.
-    if (wake_alarm.enabled
-        && t.hour == wake_alarm.hour
-        && t.minute == wake_alarm.minute
-        && t.second == 0) {
-        return MODE_RING;
+    // DHT11 нужно минимум 2 с между опросами.
+    if (now - last_sensor_ms >= 2000UL) {
+        last_sensor_ms = now;
+        last_temp = read_temperature();
+        last_hum  = read_humidity();
     }
 
-    delay(200);
+    // Обновлять дисплей не чаще 5 раз в секунду — без delay().
+    if (now - last_display_ms >= 200UL) {
+        last_display_ms = now;
+
+        DateTime t = read_clock();
+
+        // Строка 0: время + температура (ровно 16 символов)
+        char line0[17];
+        if (!isnan(last_temp)) {
+            snprintf(line0, 17, "%02d:%02d:%02d  T%3dC ", t.hour, t.minute, t.second, (int)last_temp);
+        } else {
+            snprintf(line0, 17, "%02d:%02d:%02d  T---C ", t.hour, t.minute, t.second);
+        }
+        display_text(0, 0, line0);
+
+        // Строка 1: дата + влажность (ровно 16 символов)
+        char line1[17];
+        if (!isnan(last_hum)) {
+            snprintf(line1, 17, "%02d.%02d.%04d H%3d%%", t.day, t.month, t.year, (int)last_hum);
+        } else {
+            snprintf(line1, 17, "%02d.%02d.%04d H---%%", t.day, t.month, t.year);
+        }
+        display_text(1, 0, line1);
+
+        led_set(LED_ALARM, wake_alarm.enabled);
+
+        // Снять блокировку повтора, когда ушли с минуты будильника.
+        bool at_alarm_minute = (wake_alarm.enabled
+                                && t.hour   == wake_alarm.hour
+                                && t.minute == wake_alarm.minute);
+        if (!at_alarm_minute) {
+            alarm_fired_this_minute = false;
+        }
+
+        // Срабатывание ровно на нулевой секунде, не более одного раза за минуту.
+        if (at_alarm_minute && t.second == 0 && !alarm_fired_this_minute) {
+            alarm_fired_this_minute = true;
+            return MODE_RING;
+        }
+    }
 
     byte k = pressed_keys;
     pressed_keys = 0;
 
-    if (k & KEY_1_MASK) return MODE_STOPWATCH;
-    if (k & KEY_2_MASK) {
-        timer_setup_phase = true;
-        return MODE_TIMER;
-    }
-    if (k & KEY_3_MASK) {
-        run_alarm_setup();
-        return MODE_CLOCK;
-    }
+    if (k & KEY_1_MASK) return MODE_SET_TIME;
+    if (k & KEY_2_MASK) return MODE_STOPWATCH;
+    if (k & KEY_3_MASK) return MODE_ALARM_SETUP;
     if (k & KEY_4_MASK) return MODE_RESET;
 
     return MODE_CLOCK;

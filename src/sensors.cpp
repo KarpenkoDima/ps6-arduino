@@ -1,6 +1,23 @@
 #include "sensors.h"
 #include "config.h"
+#include <DHT.h>
 
+// ===== DHT11 =====
+static DHT dht(DHT_PIN, DHT11);
+
+void sensors_env_init() {
+    dht.begin();
+}
+
+float read_temperature() {
+    return dht.readTemperature();
+}
+
+float read_humidity() {
+    return dht.readHumidity();
+}
+
+// ===== Светодиоды =====
 // Внутреннее состояние режима «звона»: когда true, две лампочки
 // мигают противофазой каждые 300 мс.
 static bool blinking = false;

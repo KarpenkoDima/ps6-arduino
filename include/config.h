@@ -6,6 +6,10 @@
 #define RTC_DAT_PIN 4
 #define RTC_CLK_PIN 5
 
+// ===== Датчик температуры и влажности DHT11 =====
+// Пин данных DHT11. Пин 8 свободен (2,3=LED; 4,5,9=RTC; 6=BUZZER; 7,10-12=KEYS).
+#define DHT_PIN 8
+
 // ===== Звуковой сигнал =====
 #define BUZZER_PIN 6
 #define BUZZER_FREQ 1500

@@ -1,4 +1,5 @@
 #include "screens.h"
+#include "screen_common.h"
 #include "context.h"
 #include "config.h"
 #include "lcd_wrapper.h"
@@ -16,7 +17,7 @@ static unsigned long accumulated_ms = 0;
  * KEY1 — выйти к часам (без сброса, состояние сохранится).
  * KEY2 — сброс на 00:00.0.
  * KEY3 — старт/пауза.
- * KEY4 — также выход к часам.
+ * KEY4 — перейти к таймеру обратного отсчёта.
  *
  * Точность отображения — 0.1 секунды.
  */
@@ -43,9 +44,14 @@ AppMode mode_stopwatch() {
         led_set(LED_RUN, false);
     }
 
-    if (k & KEY_1_MASK || k & KEY_4_MASK) {
+    if (k & KEY_1_MASK) {
         // Не обнуляем — пользователь вернётся и увидит то же значение.
         return MODE_CLOCK;
+    }
+    if (k & KEY_4_MASK) {
+        // Переход к таймеру обратного отсчёта.
+        timer_setup_phase = true;
+        return MODE_TIMER;
     }
 
     unsigned long total_ms = accumulated_ms;
@@ -68,7 +74,7 @@ AppMode mode_stopwatch() {
 
     display_clear();
     display_text(0, 0, line);
-    display_text(1, 0, "K2reset K3go K1X");
+    display_text(1, 0, "K1X K2rs K3go K4");
 
     delay(80);
     return MODE_STOPWATCH;

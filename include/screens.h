@@ -8,7 +8,9 @@ enum AppMode {
     MODE_RING,
     MODE_TIMER,
     MODE_STOPWATCH,
-    MODE_RESET
+    MODE_RESET,
+    MODE_SET_TIME,     // установка текущего времени и даты
+    MODE_ALARM_SETUP   // настройка будильника (без while-true)
 };
 
 // Каждый режим живёт в собственном файле в src/screens.
@@ -18,5 +20,7 @@ AppMode mode_ring();
 AppMode mode_timer();
 AppMode mode_stopwatch();
 AppMode mode_reset();
+AppMode mode_set_time();
+AppMode mode_alarm_setup();
 
 #endif
