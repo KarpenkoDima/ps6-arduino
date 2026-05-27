@@ -8,48 +8,36 @@
 #include "screens.h"
 #include "screen_common.h"
 
-volatile byte pressed_keys = 0;
-
-// Для каждой кнопки храним момент последнего засчитанного нажатия,
-// чтобы убрать «дребезг» физического контакта.
-static unsigned long last_press_ms[4] = { 0, 0, 0, 0 };
-static bool was_down[4] = { false, false, false, false };
-
 static const byte key_pins[4]  = { KEY_PIN_1, KEY_PIN_2, KEY_PIN_3, KEY_PIN_4 };
 static const byte key_masks[4] = { KEY_1_MASK, KEY_2_MASK, KEY_3_MASK, KEY_4_MASK };
 
-/**
- * Опрос кнопок с программным антидребезгом по времени.
- * Засчитываем нажатие только если кнопка была отпущена и с момента
- * последнего нажатия прошло не меньше KEY_DEBOUNCE_MS миллисекунд.
- */
-void scan_keys() {
+void scan_keys(AppContext* ctx) {
     byte fresh = 0;
     unsigned long ms = millis();
 
     for (byte i = 0; i < 4; i++) {
         bool down_now = digitalRead(key_pins[i]) == LOW;
 
-        if (down_now && !was_down[i]) {
-            if (ms - last_press_ms[i] >= KEY_DEBOUNCE_MS) {
+        if (down_now && !ctx->keyboard.was_down[i]) {
+            if (ms - ctx->keyboard.last_press_ms[i] >= KEY_DEBOUNCE_MS) {
                 fresh |= key_masks[i];
-                last_press_ms[i] = ms;
+                ctx->keyboard.last_press_ms[i] = ms;
             }
         }
 
-        was_down[i] = down_now;
+        ctx->keyboard.was_down[i] = down_now;
     }
 
     if (fresh) {
-        pressed_keys |= fresh;
+        ctx->pressed_keys |= fresh;
     }
 }
 
-/**
- * Точка входа Arduino.
- * Настраивает все периферийные модули будильника:
- * кнопки, LCD, RTC, светодиоды, буззер.
- */
+// Единственная точка, где хранится всё состояние приложения.
+// static ограничивает видимость этим файлом — снаружи недоступно.
+static AppContext app_ctx;
+static AppMode    current_mode = MODE_CLOCK;
+
 void setup() {
     Serial.begin(9600);
 
@@ -65,28 +53,20 @@ void setup() {
     sensors_env_init();
     display_init();
     chrono_init();
-    alarm_load();
+    alarm_load(&app_ctx);  // заполняет app_ctx.wake_alarm из EEPROM
 }
 
-// Текущий режим стейт-машины. Каждый проход loop() вызывает
-// функцию текущего режима и переключается на тот, который вернула функция.
-static AppMode current_mode = MODE_CLOCK;
-
-/**
- * Главный цикл. Опрашивает кнопки, обновляет «звон» светодиодов
- * и вызывает текущий режим.
- */
 void loop() {
-    scan_keys();
+    scan_keys(&app_ctx);
     leds_tick();
 
     switch (current_mode) {
-        case MODE_CLOCK:       current_mode = mode_clock();       break;
-        case MODE_RING:        current_mode = mode_ring();        break;
-        case MODE_TIMER:       current_mode = mode_timer();       break;
-        case MODE_STOPWATCH:   current_mode = mode_stopwatch();   break;
-        case MODE_RESET:       current_mode = mode_reset();       break;
-        case MODE_SET_TIME:    current_mode = mode_set_time();    break;
-        case MODE_ALARM_SETUP: current_mode = mode_alarm_setup(); break;
+        case MODE_CLOCK:       current_mode = mode_clock(&app_ctx);       break;
+        case MODE_RING:        current_mode = mode_ring(&app_ctx);        break;
+        case MODE_TIMER:       current_mode = mode_timer(&app_ctx);       break;
+        case MODE_STOPWATCH:   current_mode = mode_stopwatch(&app_ctx);   break;
+        case MODE_RESET:       current_mode = mode_reset(&app_ctx);       break;
+        case MODE_SET_TIME:    current_mode = mode_set_time(&app_ctx);    break;
+        case MODE_ALARM_SETUP: current_mode = mode_alarm_setup(&app_ctx); break;
     }
 }

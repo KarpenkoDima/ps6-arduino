@@ -8,71 +8,66 @@
 
 /**
  * Режим настройки будильника — полноценный state machine без while(true).
+ * Всё состояние экрана хранится в ctx->alarm_setup_s.
+ * Сброс состояния снаружи: ctx->alarm_setup_s = AlarmSetupState{};
  *
- * Активное поле помечается угловыми скобками < >.
- *
- * KEY1 — увеличить выбранное поле (час / минута / ON↔OFF).
- * KEY2 — уменьшить.
- * KEY3 — следующее поле (час → минута → ON/OFF → снова час).
- * KEY4 — сохранить в EEPROM и вернуться к часам.
+ * KEY1 — увеличить поле.  KEY2 — уменьшить.
+ * KEY3 — следующее поле.  KEY4 — сохранить в EEPROM и выйти.
  */
-AppMode mode_alarm_setup() {
-    static byte          field       = 0;
-    static bool          initialized = false;
-    static unsigned long last_update = 0;
+AppMode mode_alarm_setup(AppContext* ctx) {
+    AlarmSetupState& s = ctx->alarm_setup_s;
 
-    if (!initialized) {
-        field       = 0;
-        initialized = true;
-        last_update = 0;  // форсировать немедленную первую прорисовку
+    if (!s.initialized) {
+        s.field       = 0;
+        s.initialized = true;
+        s.last_update = 0;
         display_clear();
     }
 
-    // Обновлять дисплей не чаще 5 раз в секунду.
     unsigned long now = millis();
-    if (now - last_update >= 200UL) {
-        last_update = now;
+    if (now - s.last_update >= 200UL) {
+        s.last_update = now;
 
         char line0[17];
-        if (field == 0) {
+        if (s.field == 0) {
             snprintf(line0, 17, "Wake <%02d>:%02d %s",
-                     wake_alarm.hour, wake_alarm.minute,
-                     wake_alarm.enabled ? "ON " : "OFF");
-        } else if (field == 1) {
+                     ctx->wake_alarm.hour, ctx->wake_alarm.minute,
+                     ctx->wake_alarm.enabled ? "ON " : "OFF");
+        } else if (s.field == 1) {
             snprintf(line0, 17, "Wake %02d:<%02d> %s",
-                     wake_alarm.hour, wake_alarm.minute,
-                     wake_alarm.enabled ? "ON " : "OFF");
+                     ctx->wake_alarm.hour, ctx->wake_alarm.minute,
+                     ctx->wake_alarm.enabled ? "ON " : "OFF");
         } else {
             snprintf(line0, 17, "Wake %02d:%02d <%s>",
-                     wake_alarm.hour, wake_alarm.minute,
-                     wake_alarm.enabled ? "ON " : "OFF");
+                     ctx->wake_alarm.hour, ctx->wake_alarm.minute,
+                     ctx->wake_alarm.enabled ? "ON " : "OFF");
         }
         display_text(0, 0, line0);
         display_text(1, 0, "K1+ K2- K3> K4ok");
     }
 
-    byte k = pressed_keys;
-    pressed_keys = 0;
+    byte k = ctx->pressed_keys;
+    ctx->pressed_keys = 0;
 
     if (k & KEY_1_MASK) {
-        if (field == 0) wake_alarm.hour    = step_up(wake_alarm.hour,   24);
-        if (field == 1) wake_alarm.minute  = step_up(wake_alarm.minute,  60);
-        if (field == 2) wake_alarm.enabled = !wake_alarm.enabled;
-        last_update = 0;  // форсировать немедленное обновление дисплея
+        if (s.field == 0) ctx->wake_alarm.hour    = step_up(ctx->wake_alarm.hour,   24);
+        if (s.field == 1) ctx->wake_alarm.minute  = step_up(ctx->wake_alarm.minute,  60);
+        if (s.field == 2) ctx->wake_alarm.enabled = !ctx->wake_alarm.enabled;
+        s.last_update = 0;
     }
     if (k & KEY_2_MASK) {
-        if (field == 0) wake_alarm.hour    = step_down(wake_alarm.hour,   24);
-        if (field == 1) wake_alarm.minute  = step_down(wake_alarm.minute,  60);
-        if (field == 2) wake_alarm.enabled = !wake_alarm.enabled;
-        last_update = 0;
+        if (s.field == 0) ctx->wake_alarm.hour    = step_down(ctx->wake_alarm.hour,   24);
+        if (s.field == 1) ctx->wake_alarm.minute  = step_down(ctx->wake_alarm.minute,  60);
+        if (s.field == 2) ctx->wake_alarm.enabled = !ctx->wake_alarm.enabled;
+        s.last_update = 0;
     }
     if (k & KEY_3_MASK) {
-        field = (field + 1) % 3;
-        last_update = 0;
+        s.field = (s.field + 1) % 3;
+        s.last_update = 0;
     }
     if (k & KEY_4_MASK) {
-        alarm_save();
-        initialized = false;
+        alarm_save(ctx);
+        s.initialized = false;
         display_clear();
         return MODE_CLOCK;
     }

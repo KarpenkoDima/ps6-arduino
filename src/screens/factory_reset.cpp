@@ -8,42 +8,40 @@
 #include <Arduino.h>
 
 /**
- * Режим «factory reset».
- * Чтобы сбросить настройки к заводским, нужно удерживать KEY4
- * на протяжении RESET_HOLD_MS миллисекунд (по умолчанию 3 секунды).
- * Это защита от случайного нажатия.
+ * Режим заводского сброса.
+ * Состояние (hold_start_ms) хранится в ctx->reset_s — без static-локалей.
  *
- * После успешного сброса будильник ставится на 07:00 OFF, время RTC
- * сбрасывается на 01.01.2026 00:00:00.
+ * Нужно удерживать KEY4 в течение RESET_HOLD_MS мс.
+ * KEY1 — отмена.
  */
-AppMode mode_reset() {
-    static unsigned long hold_start_ms = 0;
+AppMode mode_reset(AppContext* ctx) {
+    ResetState& s = ctx->reset_s;
 
     display_clear();
     display_text(0, 0, "Hold K4 to reset");
-    display_text(1, 0, "K1: cancel");
+    display_text(1, 0, "K1: cancel      ");
 
     bool key4_down = digitalRead(KEY_PIN_4) == LOW;
 
     if (key4_down) {
-        if (hold_start_ms == 0) hold_start_ms = millis();
-        unsigned long held = millis() - hold_start_ms;
+        if (s.hold_start_ms == 0) s.hold_start_ms = millis();
+        unsigned long held = millis() - s.hold_start_ms;
 
-        // Прогресс-бар на нижней строке: показывает, сколько ещё держать.
-        char line[17];
+        // Прогресс-бар на нижней строке.
+        char bar[17];
         unsigned long pct = (held * 16UL) / RESET_HOLD_MS;
         if (pct > 16) pct = 16;
-        for (unsigned long i = 0; i < 16; i++) line[i] = (i < pct) ? '#' : ' ';
-        line[16] = '\0';
-        display_text(1, 0, line);
+        for (unsigned long i = 0; i < 16; i++) bar[i] = (i < pct) ? '#' : ' ';
+        bar[16] = '\0';
+        display_text(1, 0, bar);
 
         if (held >= RESET_HOLD_MS) {
-            hold_start_ms = 0;
+            s.hold_start_ms = 0;
 
-            wake_alarm.hour    = DEFAULT_WAKE_HOUR;
-            wake_alarm.minute  = DEFAULT_WAKE_MINUTE;
-            wake_alarm.enabled = false;
-            alarm_save();
+            ctx->wake_alarm.hour    = DEFAULT_WAKE_HOUR;
+            ctx->wake_alarm.minute  = DEFAULT_WAKE_MINUTE;
+            ctx->wake_alarm.enabled = false;
+            alarm_save(ctx);
 
             write_clock(1, 1, 2026, 0, 0, 0);
 
@@ -51,16 +49,15 @@ AppMode mode_reset() {
             led_set(LED_RUN,   false);
 
             display_clear();
-            display_text(0, 0, "Reset done!");
+            display_text(0, 0, "Reset done!     ");
             delay(1500);
-            pressed_keys = 0;
+            ctx->pressed_keys = 0;
             return MODE_CLOCK;
         }
     } else {
-        hold_start_ms = 0;
-        // Любое отжатие KEY4 — выходим, если KEY1 нажат.
-        byte k = pressed_keys;
-        pressed_keys = 0;
+        s.hold_start_ms = 0;
+        byte k = ctx->pressed_keys;
+        ctx->pressed_keys = 0;
         if (k & KEY_1_MASK) return MODE_CLOCK;
     }
 
