@@ -3,24 +3,16 @@
 
 #include <Arduino.h>
 
-// Настройки будильника, которые видны всем экранам.
-struct Alarm {
-    byte hour;
-    byte minute;
-    bool enabled;
-};
+// Используется в сигнатурах ниже; полное определение — в context.h.
+struct AppContext;
 
-extern Alarm wake_alarm;
+// Загрузить настройки будильника из EEPROM → ctx->wake_alarm.
+void alarm_load(AppContext* ctx);
 
-// Состояние таймера, которое нужно сохранять между переключениями
-// «настройка таймера ↔ обратный отсчёт».
-extern bool timer_setup_phase;
+// Сохранить ctx->wake_alarm в EEPROM (только при изменении ячейки).
+void alarm_save(const AppContext* ctx);
 
-// Загружает/сохраняет будильник в EEPROM с проверкой magic-байта.
-void alarm_load();
-void alarm_save();
-
-// Короткий «бип» через стандартный tone().
+// Короткий звуковой сигнал заданной длительности.
 void beep(int ms);
 
 #endif
